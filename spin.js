@@ -142,6 +142,7 @@
     ui.image.addEventListener('load', () => {
       ui.image.hidden = false;
       ui.empty.hidden = true;
+      renderTransform();
     });
     ui.image.addEventListener('error', () => {
       ui.image.hidden = true;
@@ -153,6 +154,7 @@
     ui.viewport.addEventListener('pointercancel', pointerEnd);
     ui.viewport.addEventListener('lostpointercapture', pointerEnd);
     ui.viewport.addEventListener('wheel', event => {
+      if (!event.ctrlKey && !event.metaKey) return;
       event.preventDefault();
       zoom(current.scale + (event.deltaY < 0 ? 0.15 : -0.15));
     }, {passive: false});
@@ -235,8 +237,11 @@
     const pending = group.items.filter(item => item.state === 'idle' || item.state === 'loading').length;
     const failed = group.items.filter(item => item.state === 'error').length;
     let displayIndex = index;
-    if (group.items[displayIndex].state !== 'loaded') {
+    if (group.items[displayIndex].state === 'error') {
       displayIndex = group.items.findIndex(item => item.state === 'loaded');
+      if (displayIndex >= 0) current.index = displayIndex;
+    } else if (group.items[displayIndex].state !== 'loaded') {
+      displayIndex = -1;
     }
     if (displayIndex >= 0) {
       const item = group.items[displayIndex];
@@ -258,7 +263,7 @@
     ui.thumbs.querySelectorAll('button').forEach((button, thumbIndex) => {
       const item = group.items[thumbIndex];
       button.setAttribute('aria-pressed', String(thumbIndex === displayIndex));
-      button.disabled = item.state === 'error';
+      button.disabled = item.state !== 'loaded';
       button.classList.toggle('is-loading', item.state === 'loading' || item.state === 'idle');
       const imageSlot = button.firstElementChild;
       if (item.state === 'loaded' && !imageSlot.firstElementChild) {
@@ -281,7 +286,7 @@
         ? '8 последовательных ракурсов. AI-визуализация помогает рассмотреть форму; детали могут отличаться от товара.'
         : 'Предоставленные фотографии: вид спереди, сзади, сбоку, внутри и крупные детали.';
     }
-    dialog.querySelectorAll('.spin-arrow').forEach(button => button.disabled = loaded.length < 2 && pending === 0);
+    dialog.querySelectorAll('.spin-arrow').forEach(button => button.disabled = loaded.length < 2);
     renderTransform();
   }
 
@@ -290,7 +295,7 @@
     const items = current.group.items;
     for (let offset = 1; offset <= items.length; offset++) {
       const candidate = (current.index + direction * offset + items.length * 2) % items.length;
-      if (items[candidate].state !== 'error') {
+      if (items[candidate].state === 'loaded') {
         current.index = candidate;
         break;
       }
@@ -313,15 +318,18 @@
 
   function zoom(value) {
     if (!current) return;
-    current.scale = Math.min(3, Math.max(1, value));
+    current.scale = Math.min(current.mode === 'photos' ? 3 : 2, Math.max(1, value));
     if (current.scale === 1) current.panX = current.panY = 0;
     renderTransform();
   }
 
   function renderTransform() {
     if (!current) return;
-    const maxX = ui.viewport.clientWidth * (current.scale - 1) / 2;
-    const maxY = ui.viewport.clientHeight * (current.scale - 1) / 2;
+    const width = ui.viewport.clientWidth, height = ui.viewport.clientHeight;
+    const naturalWidth = ui.image.naturalWidth || width, naturalHeight = ui.image.naturalHeight || height;
+    const fit = Math.min(width / naturalWidth, height / naturalHeight);
+    const maxX = Math.max(0, (naturalWidth * fit * current.scale - width) / 2);
+    const maxY = Math.max(0, (naturalHeight * fit * current.scale - height) / 2);
     current.panX = Math.max(-maxX, Math.min(maxX, current.panX));
     current.panY = Math.max(-maxY, Math.min(maxY, current.panY));
     ui.image.style.transform = `translate(${current.panX}px, ${current.panY}px) scale(${current.scale})`;
@@ -334,7 +342,7 @@
         ? 'Проведите влево или вправо, чтобы повернуть сумку'
         : 'Листайте фотографии · нажмите +, чтобы рассмотреть детали';
     dialog.querySelector('[data-spin-zoom="-0.25"]').disabled = current.scale <= 1;
-    dialog.querySelector('[data-spin-zoom="0.25"]').disabled = current.scale >= 3;
+    dialog.querySelector('[data-spin-zoom="0.25"]').disabled = current.scale >= (current.mode === 'photos' ? 3 : 2);
   }
 
   function reset() {
