@@ -1,163 +1,41 @@
-'use strict';
-(() => {
-  const section = document.getElementById('formStudio');
-  if (!section) return;
-  const viewport = section.querySelector('.studio-viewport');
-  const picture = section.querySelector('.studio-image');
-  const selector = section.querySelector('#studioModel');
-  const status = section.querySelector('.studio-status');
-  const angle = section.querySelector('.studio-angle');
-  const angles = section.querySelector('.studio-angles');
-  const cache = new Map();
-  let model = products.find(product => product.id === 'velour');
-  let frame = 0;
-  let visible = false;
-  let drag = null;
-  let timer = null;
-  const autoButton = section.querySelector('[data-studio-auto]');
-
-  selector.innerHTML = products.map(product => `<option value="${product.id}">N° ${product.number} — ${product.name}</option>`).join('');
-  selector.value = model.id;
-  angles.innerHTML = Array.from({length: 8}, (_, index) => `<button type="button" data-angle="${index}" aria-label="Ракурс ${index * 45} градусов" aria-pressed="false">${index * 45}°</button>`).join('');
-
-  function group() {
-    if (!cache.has(model.id)) cache.set(model.id, Array.from({length: 8}, (_, index) => ({
-      url: `assets/spin/${model.id}/${String(index + 1).padStart(2, '0')}.webp`, state: 'idle'
-    })));
-    return cache.get(model.id);
-  }
-
-  function stop() {
-    clearInterval(timer);
-    timer = null;
-    autoButton.textContent = 'Автоповорот';
-    autoButton.setAttribute('aria-pressed', 'false');
-  }
-
-  function render() {
-    const items = group();
-    const ready = items.filter(item => item.state === 'loaded').length;
-    const loading = items.some(item => item.state === 'idle' || item.state === 'loading');
-    if (items[frame].state === 'error') {
-      const first = items.findIndex(item => item.state === 'loaded');
-      if (first >= 0) frame = first;
-    }
-    const frameReady = items[frame].state === 'loaded';
-    const source = frameReady ? items[frame].url : `assets/${model.id}.webp`;
-    if (picture.getAttribute('src') !== source) picture.src = source;
-    picture.alt = `${model.name} — ${frameReady ? `AI-ракурс ${frame * 45}°` : 'каталожный вид'}`;
-    angle.textContent = frameReady ? `${String(frame * 45).padStart(3, '0')}° / 360°` : 'Общий вид';
-    viewport.setAttribute('aria-label', `Поворот сумки ${model.name}, ${frame * 45} градусов. Используйте стрелки на клавиатуре или кнопки ракурсов.`);
-    section.querySelectorAll('[data-angle]').forEach(button => {
-      const index = Number(button.dataset.angle);
-      button.disabled = items[index].state !== 'loaded';
-      button.setAttribute('aria-pressed', String(index === frame && frameReady));
-    });
-    section.querySelectorAll('[data-studio-step]').forEach(button => button.disabled = ready < 2);
-    autoButton.disabled = ready < 2;
-    if (!visible) status.textContent = 'Проведите по изображению, чтобы повернуть сумку';
-    else if (loading) status.textContent = `Подготавливаем ракурсы · ${ready} из 8`;
-    else if (ready === 8) status.textContent = 'Проведите влево или вправо · 8 ракурсов';
-    else status.textContent = ready ? `Доступно ${ready} из 8 ракурсов. Остальные можно загрузить повторно.` : 'Ракурсы не загрузились. Каталожное фото доступно.';
-    section.querySelector('[data-studio-retry]').hidden = loading || ready === 8;
-  }
-
-  function load() {
-    const id = model.id;
-    group().forEach(item => {
-      if (item.state === 'loaded' || item.state === 'loading') return;
-      item.state = 'loading';
-      const image = new Image();
-      let settled = false;
-      const timeout = setTimeout(() => finish('error'), 15000);
-      const finish = state => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timeout);
-        item.state = state;
-        if (model.id === id) render();
-      };
-      image.onload = () => finish('loaded');
-      image.onerror = () => finish('error');
-      image.src = item.url;
-    });
-    render();
-  }
-
-  function choose(id) {
-    stop();
-    model = products.find(product => product.id === id) || products[0];
-    frame = 0;
-    section.querySelector('.studio-name').textContent = model.name;
-    section.querySelector('.studio-color').textContent = model.color;
-    section.querySelector('.studio-price').textContent = money(model.price);
-    section.querySelector('[data-spin]').dataset.spin = model.id;
-    section.querySelector('[data-product]').dataset.product = model.id;
-    section.querySelector('.studio-photo-note').hidden = !model.photographed;
-    viewport.setAttribute('aria-label', `Поворот сумки ${model.name}`);
-    render();
-    if (visible) load();
-  }
-
-  function step(direction) {
-    const items = group();
-    for (let distance = 1; distance <= 8; distance++) {
-      const next = (frame + direction * distance + 16) % 8;
-      if (items[next].state === 'loaded') {frame = next; break;}
-    }
-    render();
-  }
-
-  selector.addEventListener('change', () => choose(selector.value));
-  section.addEventListener('click', event => {
-    const target = event.target.closest('button');
-    if (!target || target.disabled) return;
-    if (target.hasAttribute('data-angle')) {stop(); frame = Number(target.dataset.angle); render();}
-    if (target.hasAttribute('data-studio-step')) {stop(); step(Number(target.dataset.studioStep));}
-    if (target.hasAttribute('data-studio-retry')) load();
-    if (target.hasAttribute('data-studio-auto')) {
-      if (timer) stop();
-      else {
-        autoButton.textContent = 'Остановить';
-        autoButton.setAttribute('aria-pressed', 'true');
-        timer = setInterval(() => step(1), 950);
-      }
-    }
-  });
-  viewport.addEventListener('keydown', event => {
-    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
-    event.preventDefault(); stop();
-    if (event.key.startsWith('Arrow')) step(event.key === 'ArrowLeft' ? -1 : 1);
-    else {
-      const available = group().map((item, index) => item.state === 'loaded' ? index : -1).filter(index => index >= 0);
-      frame = (event.key === 'Home' ? available[0] : available.at(-1)) ?? 0;
-      render();
-    }
-  });
-  viewport.addEventListener('pointerdown', event => {
-    if (event.button !== 0 || event.target.closest('button')) return;
-    stop(); drag = {id: event.pointerId, x: event.clientX, y: event.clientY, active: false};
-  });
-  viewport.addEventListener('pointermove', event => {
-    if (!drag || drag.id !== event.pointerId) return;
-    if (event.pointerType === 'mouse' && !(event.buttons & 1)) {drag = null; return;}
-    const dx = event.clientX - drag.x, dy = event.clientY - drag.y;
-    if (!drag.active && Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 10) {drag = null; return;}
-    if (Math.abs(dx) > Math.max(25, viewport.clientWidth / 12)) {
-      if (!drag.active) {viewport.setPointerCapture(event.pointerId); drag.active = true;}
-      step(dx > 0 ? 1 : -1);
-      drag.x = event.clientX; drag.y = event.clientY;
-    }
-  });
-  ['pointerup', 'pointercancel'].forEach(type => window.addEventListener(type, () => {drag = null;}));
-  viewport.addEventListener('lostpointercapture', () => {drag = null;});
-  document.addEventListener('visibilitychange', () => {if (document.hidden) stop();});
-  const observer = new IntersectionObserver(entries => {
-    entries.forEach(entry => {
-      if (entry.isIntersecting) {visible = true; load();}
-      else {visible = false; stop();}
-    });
-  }, {rootMargin: '180px'});
-  observer.observe(section);
-  choose(model.id);
-})();
+import {createBagViewer} from './bag-viewer.js?v=20261021-3d2';
+function initStudio() {
+ const section=document.getElementById('formStudio');if(!section)return;
+ const $=selector=>section.querySelector(selector), viewport=$('.studio-viewport'), selector=$('#studioModel'), status=$('.studio-status'), retry=$('[data-studio-retry]');
+ let model=products.find(item=>item.id==='velour'), viewer=null, visible=false, modal=false, pending=false, generation=0;
+ const auto=$('[data-studio-auto]');
+ selector.innerHTML=products.map(item=>`<option value="${item.id}">N° ${item.number} — ${item.name}</option>`).join('');selector.value=model.id;
+ $('.studio-angles').innerHTML=[[0,'Спереди'],[90,'Справа'],[180,'Сзади'],[270,'Слева']].map(([deg,label])=>`<button type="button" data-angle="${deg}">${label} <span>${deg}°</span></button>`).join('');
+ $('.studio-bottom').insertAdjacentHTML('beforeend','<div class="studio-zoom" role="group" aria-label="Масштаб модели"><button type="button" data-studio-zoom="-0.25" aria-label="Отдалить">−</button><output class="studio-scale" aria-label="Масштаб">100%</output><button type="button" data-studio-zoom="0.25" aria-label="Приблизить">+</button><button type="button" data-studio-reset aria-label="Исходный ракурс и масштаб">↺</button></div>');
+ viewport.setAttribute('aria-label','Объёмная модель сумки. Стрелки: вращение и наклон. Плюс и минус: масштаб. Home: исходный вид.');
+ function autoState(value){auto.textContent=value?'Пауза':'Автоповорот';auto.setAttribute('aria-pressed',String(value));}
+ function failure(error){status.textContent=error?.message||error||'Не удалось открыть 3D. Каталожное фото доступно.';retry.hidden=false;pending=false;viewport.removeAttribute('aria-busy');}
+ async function load(){
+  if(viewer||pending)return;pending=true;const ticket=++generation;retry.hidden=true;status.textContent='Подготавливаем объём…';viewport.setAttribute('aria-busy','true');
+  try{
+   const instance=await createBagViewer(viewport,model.id,{onChange:state=>{if(ticket!==generation)return;$('.studio-angle').textContent=`${String(state.angle).padStart(3,'0')}° / 360°`;$('.studio-scale').textContent=`${Math.round(state.zoom*100)}%`;},onAutoChange:autoState,onError:failure});
+   if(ticket!==generation){instance.dispose();return;} viewer=instance;viewer.setModel(model.id);viewer.setVisible(visible&&!modal);pending=false;viewport.removeAttribute('aria-busy');status.textContent='Вращайте и наклоняйте · Два пальца — масштаб';
+  }catch(error){if(ticket===generation)failure(error);}
+ }
+ function choose(){
+  model=products.find(item=>item.id===selector.value)||products[9];
+  $('.studio-name').textContent=model.name;$('.studio-color').textContent=model.color;$('.studio-price').textContent=new Intl.NumberFormat('ru-RU',{style:'currency',currency:'RUB',maximumFractionDigits:0}).format(model.price);
+  $('[data-spin]').dataset.spin=model.id;$('[data-product]').dataset.product=model.id;
+  $('.studio-image').src=`assets/${model.id}.webp`;$('.studio-image').alt=`${model.name} — каталожный вид`;
+  $('.studio-photo-note').textContent=model.id==='velour'?'Реальные фотографии Velour — в карточке и в режиме «Фотографии».':'Каталожная визуализация — в карточке и в режиме «Фотографии».';
+  viewer?.setModel(model.id);if(visible&&!viewer)load();
+ }
+ selector.addEventListener('change',choose);
+ section.addEventListener('click',event=>{const b=event.target.closest('button');if(!b)return;
+  if(b.dataset.angle!==undefined)viewer?.setAngle(Number(b.dataset.angle));
+  if(b.dataset.studioStep)viewer?.step(Number(b.dataset.studioStep)*Math.PI/4);
+  if(b.dataset.studioZoom)viewer?.zoomBy(Number(b.dataset.studioZoom));
+  if(b.hasAttribute('data-studio-reset'))viewer?.reset();
+  if(b.hasAttribute('data-studio-auto'))viewer?.setAuto(b.getAttribute('aria-pressed')!=='true');
+  if(b.hasAttribute('data-studio-retry')){generation++;viewer?.dispose();viewer=null;pending=false;load();}
+ });
+ const observer=new IntersectionObserver(entries=>{visible=entries[0].isIntersecting;if(visible)load();viewer?.setVisible(visible&&!modal);},{rootMargin:'120px'});observer.observe(viewport);
+ document.addEventListener('barsalini:viewer',event=>{modal=event.detail.open;viewer?.setVisible(visible&&!modal);});
+ choose();
+}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',initStudio,{once:true});else initStudio();
