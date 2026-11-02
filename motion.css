@@ -1,0 +1,97 @@
+/* Quiet movement. Content remains visible without motion.js. */
+:root {
+  --motion-ease: cubic-bezier(.22, .72, .24, 1);
+  --motion-fast: 240ms;
+}
+
+dialog[open] {
+  animation: atelier-dialog-in 420ms var(--motion-ease);
+}
+
+dialog[open]::backdrop {
+  animation: atelier-backdrop-in 420ms ease-out;
+}
+
+@keyframes atelier-dialog-in {
+  from { opacity: .45; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes atelier-backdrop-in {
+  from { background-color: #201b1600; backdrop-filter: blur(0); }
+  to { background-color: #201b1666; backdrop-filter: blur(4px); }
+}
+
+.outline-button, .solid-button, .icon-button, .close, .close-button,
+.detail-thumb img, .model-choice, .filters button, .underlink,
+.favorite, .back-top {
+  transition: color var(--motion-fast) ease,
+    background-color var(--motion-fast) ease,
+    border-color var(--motion-fast) ease,
+    opacity var(--motion-fast) ease;
+}
+
+.outline-button > span, .solid-button > span,
+.text-link > span, .back-top {
+  transition: transform 350ms var(--motion-ease);
+}
+
+.closeup-panel {
+  transition: flex 800ms var(--motion-ease), border-color 300ms ease;
+}
+
+.closeup-select img {
+  transition: height 800ms var(--motion-ease), top 800ms var(--motion-ease),
+    transform 800ms var(--motion-ease), opacity 400ms ease;
+}
+
+.closeup-copy {
+  transition: opacity 260ms ease, transform 480ms var(--motion-ease);
+}
+
+.closeup-panel.active .closeup-copy {
+  transition-delay: 180ms;
+}
+
+.look-frame { overflow: hidden; }
+.detail-thumbnails { scroll-behavior: smooth; }
+
+@media (hover: hover) and (pointer: fine) {
+  .product-image-button img,
+  .editorial-photo img,
+  .real-lookbook img {
+    transition: transform 1000ms var(--motion-ease);
+  }
+
+  .product-image-button:hover img { transform: scale(1.035); }
+  .editorial-photo:hover img, .real-lookbook button:hover img { transform: scale(1.025); }
+  .outline-button:hover > span, .solid-button:hover > span,
+  .text-link:hover > span { transform: translateX(3px); }
+  .back-top:hover { transform: translateY(-3px); }
+  .icon-button:hover, .close:hover, .close-button:hover,
+  .favorite:hover { background-color: #84745e0c; }
+  .detail-thumb:hover img { border-color: #b8aa99; }
+  .model-choice:hover { border-color: #a49887; }
+}
+
+@media (hover: none) {
+  .product-image-button:hover img, .editorial-photo:hover img,
+  .real-lookbook button:hover img { transform: none; }
+}
+
+@media (max-width: 760px) {
+  .closeup-panel, .closeup-select img, .closeup-copy,
+  .closeup-panel.active .closeup-copy { transition: none; }
+  .closeup-collection, .detail-thumbnails {
+    overscroll-behavior-x: contain;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}
